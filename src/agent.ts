@@ -1,7 +1,7 @@
+// src/agent.ts
+
 import { createOpenAI } from '@ai-sdk/openai';
-import { embed } from 'ai';
-// streamText is no longer needed for the simulated response
-// import { streamText } from 'ai'; 
+import { embed, generateText } from 'ai'; // MODIFIED: Added generateText
 
 // Initialize the OpenAI client
 const openai = createOpenAI();
@@ -34,19 +34,61 @@ class MastraAgent {
     console.log("Berkshire Hathaway Agent Initialized!");
   }
 
-  // The main chat logic is now MODIFIED to return a simulated response
-  async chat(userInput: string): Promise<string> { // Added a return type
+  // MODIFIED: The main chat logic is now IMPLEMENTED
+  async chat(userInput: string): Promise<string> {
     console.log(`\nUser Query: "${userInput}"`);
 
-    // --- WE ARE SKIPPING THE REAL API CALLS TO AVOID BILLING ERRORS ---
-    console.log("[API Call SKIPPED]: Returning simulated response.");
+    // =================================================================
+    // STEP 1: RETRIEVE - Find relevant documents
+    // =================================================================
+    console.log("\n[Step 1: RETRIEVE]");
+
+    // Create an embedding of the user's query
+    const { embedding } = await embed({
+      model: embeddingModel,
+      value: userInput,
+    });
+    console.log("[RETRIEVE] Generated query embedding.");
+
+    // Search the vector DB with the embedding
+    const searchResults = await this.vectorDB.search(embedding);
+    console.log("[RETRIEVE] Found relevant chunks in vector DB.");
+
+    // =================================================================
+    // STEP 2: AUGMENT - Create a prompt with the retrieved context
+    // =================================================================
+    console.log("\n[Step 2: AUGMENT]");
+
+    const context = searchResults.map(r => r.metadata.text).join('\n---\n');
     
-    // In a real scenario, the RAG steps would happen here.
-    // 1. RETRIEVE
-    // 2. AUGMENT
-    // 3. GENERATE
-    
-    return "This is a simulated response. If you see this, your frontend, server, and agent are all connected correctly! Add billing to your OpenAI account to get real answers.";
+    const augmentedPrompt = `
+      Based on the following context from Berkshire Hathaway shareholder letters, please answer the user's question.
+
+      CONTEXT:
+      ---
+      ${context}
+      ---
+      
+      USER QUESTION:
+      ${userInput}
+    `;
+    console.log("[AUGMENT] Created augmented prompt for the model.");
+
+
+    // =================================================================
+    // STEP 3: GENERATE - Call the LLM with the augmented prompt
+    // =================================================================
+    console.log("\n[Step 3: GENERATE]");
+    console.log("[GENERATE] Sending request to OpenAI...");
+
+    const { text } = await generateText({
+      model: this.model,
+      system: this.systemPrompt,
+      prompt: augmentedPrompt,
+    });
+    console.log("[GENERATE] Received response from OpenAI.");
+
+    return text;
   }
 }
 

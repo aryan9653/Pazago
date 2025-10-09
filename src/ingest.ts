@@ -1,115 +1,78 @@
-import dotenv from 'dotenv';
-dotenv.config();
-import fs from 'fs/promises';
-import path from 'path';
-import { createRequire } from 'module';
-
-// Use require for pdf-parse to ensure compatibility
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
-
-// NEW: Import AI SDK components for embeddings
 import { createOpenAI } from '@ai-sdk/openai';
 import { embed } from 'ai';
+// streamText is no longer needed for the simulated response
+// import { streamText } from 'ai'; 
 
-// NEW: Initialize the OpenAI client. It automatically uses the OPENAI_API_KEY from your .env file.
+// Initialize the OpenAI client
 const openai = createOpenAI();
+const embeddingModel = openai.embedding('text-embedding-3-small');
 
 // --- PLACEHOLDERS for the fictional Mastra framework ---
 
-// Placeholder for the fictional MastraVectorDB class
+// Placeholder for the Vector DB, now with a 'search' method
 class MastraVectorDB {
-  async upsert(data: { id: string; vector: number[]; metadata: object }) {
-    // In a real application, this would save the data to PostgreSQL/pgvector.
-    // For now, we'll just log a success message for the first item to show it's working.
-    if (data.id.endsWith('-0')) {
-       console.log(`  - Simulating save for chunk ID: ${data.id}`);
-    }
-    // Simulate a small delay as a real database call would have.
-    await new Promise(resolve => setTimeout(resolve, 2)); 
-    return { success: true };
+  async search(queryVector: number[]) {
+    console.log("\n[Tool Call: SIMULATING Vector DB Search...]");
+    console.log("[DB] Found 2 dummy chunks.");
+    return [
+      { metadata: { text: "Warren Buffett emphasizes that the best way to own common stocks is through an index fund that incurs minimal costs. He believes attempting to pick individual stocks is a loser's game for most people.", source: "2016.pdf" } },
+      { metadata: { text: "Regarding acquisitions, Buffett looks for businesses with consistent earning power, good returns on equity, and management in place. He is not interested in turnaround situations.", source: "2003.pdf" } }
+    ];
   }
 }
 
-// Placeholder for the fictional MDocument class
-class MDocument {
-  content: string;
-  metadata: { source: string };
+// Placeholder for the MastraAgent class, now with tool-using logic
+class MastraAgent {
+  private model: any;
+  private systemPrompt: string;
+  private vectorDB: MastraVectorDB;
 
-  constructor(options: { content: string; metadata: { source: string } }) {
-    this.content = options.content;
-    this.metadata = options.metadata;
+  constructor(options: { model: any; systemPrompt: string }) {
+    this.model = options.model;
+    this.systemPrompt = options.systemPrompt;
+    this.vectorDB = new MastraVectorDB(); // Agent has its own DB connection
+    console.log("Berkshire Hathaway Agent Initialized!");
   }
 
-  chunk(options: { size: number; overlap: number }): { content: string; metadata: { source: string } }[] {
-    const chunks: { content: string; metadata: { source: string } }[] = [];
-    let index = 0;
-    while (index < this.content.length) {
-      const end = Math.min(index + options.size, this.content.length);
-      const chunkContent = this.content.slice(index, end);
-      chunks.push({ content: chunkContent, metadata: this.metadata });
-      index += options.size - options.overlap;
-      if (options.size <= options.overlap) break;
-    }
-    return chunks;
-  }
-}
+  // The main chat logic is now MODIFIED to return a simulated response
+  async chat(userInput: string): Promise<string> { // Added a return type
+    console.log(`\nUser Query: "${userInput}"`);
 
-// --- MAIN SCRIPT LOGIC ---
-
-const dataDirectory = path.join(process.cwd(), 'data');
-const vectorDB = new MastraVectorDB(); // Initialize our placeholder DB
-
-async function processDocuments() {
-  console.log('Starting document ingestion...');
-  try {
-    const files = await fs.readdir(dataDirectory);
-    const pdfFiles = files.filter(file => file.endsWith('.pdf'));
-
-    if (pdfFiles.length === 0) {
-      console.log('No PDF files found in the "data" directory.');
-      return;
-    }
-
-    console.log(`Found ${pdfFiles.length} PDF files to process.`);
-    const allChunks: { content: string; metadata: { source: string } }[] = [];
-
-    for (const fileName of pdfFiles) {
-      console.log(`- Processing ${fileName}...`);
-      const filePath = path.join(dataDirectory, fileName);
-      const dataBuffer = await fs.readFile(filePath);
-      const pdfData = await pdf(dataBuffer);
-      const mdoc = new MDocument({ content: pdfData.text, metadata: { source: fileName } });
-      const chunks = mdoc.chunk({ size: 1500, overlap: 200 });
-      allChunks.push(...chunks);
-    }
-
-    console.log(`\nTotal chunks created: ${allChunks.length}`);
-
-    // --- NEW: Embedding Generation and Storage Section ---
-    console.log('\nStarting embedding generation and storage...');
-    const embeddingModel = openai.embedding('text-embedding-3-small');
-
-    for (let i = 0; i < allChunks.length; i++) {
-      const chunk = allChunks[i];
-      const { embedding } = await embed({ model: embeddingModel, value: chunk.content });
-      
-      await vectorDB.upsert({
-        id: `${chunk.metadata.source}-${i}`,
-        vector: embedding,
-        metadata: { text: chunk.content, source: chunk.metadata.source },
-      });
-
-      if ((i + 1) % 100 === 0) {
-        console.log(`  - Embedded and stored ${i + 1} of ${allChunks.length} chunks.`);
-      }
-    }
-
-    console.log('\nEmbedding and storage process complete!');
-
-  } catch (error) {
-    console.error('An error occurred during the process:', error);
+    // --- WE ARE SKIPPING THE REAL API CALLS TO AVOID BILLING ERRORS ---
+    console.log("[API Call SKIPPED]: Returning simulated response.");
+    
+    // In a real scenario, the RAG steps would happen here.
+    // 1. RETRIEVE
+    // 2. AUGMENT
+    // 3. GENERATE
+    
+    return "This is a simulated response. If you see this, your frontend, server, and agent are all connected correctly! Add billing to your OpenAI account to get real answers.";
   }
 }
 
-processDocuments();
+// --- FULL SYSTEM PROMPT from the assignment document ---
+const systemPrompt = `You are a knowledgeable financial analyst specializing in Warren Buffett's investment philosophy and Berkshire Hathaway's business strategy. Your expertise comes from analyzing years of Berkshire Hathaway annual shareholder letters.
+
+Core Responsibilities:
+- Answer questions about Warren Buffett's investment principles and philosophy.
+- Provide insights into Berkshire Hathaway's business strategies and decisions.
+- Reference specific examples from the shareholder letters when appropriate.
+- Maintain context across conversations for follow-up questions.
+
+Guidelines:
+- Always ground your responses in the provided shareholder letter content.
+- Quote directly from the letters when relevant, with proper citations.
+- If information isn't available in the documents, clearly state this limitation.
+- For numerical data or specific acquisitions, cite the exact source letter and year.
+- Explain complex financial concepts in accessible terms while maintaining accuracy.
+
+Response Format:
+- Provide comprehensive, well-structured answers.
+- Include relevant quotes from the letters with year attribution.
+- List source documents used for your response.`;
+
+// --- Initialize and Export the Agent ---
+export const berkshireAgent = new MastraAgent({
+  model: openai.chat('gpt-4o'),
+  systemPrompt: systemPrompt
+});
